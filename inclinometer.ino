@@ -11,22 +11,40 @@
 //////////////////////////////////////////////////////////
 
 
-// arduino NANO
-
-//A4  >  SDA( MPU)
-//A5  >  SCL (MPU)
-//D6  >  SIGNAL  (  WS2812B )
-
 ////////////////////////////entropiemaximun////////////////////
 
 ///17/07/2021   init prog according example 
 ///05/08/2021   field test (https://youtu.be/OA_bdoBcYg4)
+
 ///15/08/2021   initial deposit 
-
+///15-17/08/2021   extra  function with  other button and  fix angle color according switch activation
+//10/10/2021  1.6 add filter ti define the zero at the init  and  add choice of  led color  between  range angle 
+//21/10/2021 2.0  clean the files
 ///////////////////
+// arduino NANO
 
-#define STAB_NOISE    0.05  // angle Sensitivity  to set the ref angleas init step
-#define ANGLE_MPU    Y  // angle choice  X or Y /  not Z
+//+5V > +5V  MPU  
+// A5 >  SCL  MPU
+// A4 > SDA  MPU
+// 
+// VIN > W2812B +5V
+// D6 > W2812B signal
+//
+// D7 > Switch ( potentiometer to shift down the level 12V > 5v
+//
+//
+//
+//
+
+
+
+#define buttonPin  7  //   button   to set the  fix  angle  function 
+
+#define ANGLE_REF   -38  // angle ref pour la fonction godet connu  sera  actif  avec le bouton
+#define Bpixel  200 //  power  of leds
+#define STAB_NOISE    0.5  // angle Sensitivity  to set the ref angleas init step
+#define ANGLE_MPU    Y  // angle choice  X or Y /  not Z  for  MPU
+#define sample 100   
 //----------------------------------------------------------------------------------------------------------------------
 #include <Wire.h>
 //----------------------------------------------------------------------------------------------------------------------
@@ -40,7 +58,7 @@
 #define Z     2     // Z axis
 
 #define MPU_ADDRESS 0x68  // I2C address of the MPU-6050
-#define FREQ        10// 250  Sampling frequency
+#define FREQ        250// 250  Sampling frequency
 #define SSF_GYRO    65.5  // Sensitivity Scale Factor of the gyro from datasheet
 
 
@@ -63,10 +81,54 @@
 // strandtest example for more information on possible values.
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
-#define DELAYVAL 500 // Time (in milliseconds) to pause between pixels
+#define DELAYVAL 200 // Time (in milliseconds) to pause between pixels
 
 int npixel =0;
 int chenillard =0;
+
+
+#define VERT (0, 126, 58)
+#define VERT1 (100, 209, 62)
+
+#define BLEU (0, 38, 133)
+#define BLEU1 (66, 154, 223)
+#define BLEU2 (77, 199, 253)
+
+
+#define JAUNE (118, 57, 49)
+#define JAUNE1 (241, 171, 0)
+#define JAUNE2 (250, 223, 0)
+
+
+
+#define ROUGE (205, 30, 16)
+#define ROUGE1 (252, 0, 127)
+#define ROUGE2 (254, 121, 209)
+
+
+#define VIOLET (76, 94, 119)
+#define VIOLET1 (94, 83, 199)
+#define VIOLET2 (126, 119, 210)
+
+
+#define SANS (0, 0, 0)
+
+
+#define ANGLE0 0
+#define ANGLE1 7
+#define ANGLE2 14
+#define ANGLE3 21
+#define ANGLE4 28
+#define ANGLE5 35
+#define ANGLE6 42
+#define ANGLE7 49
+#define ANGLE8 56
+#define ANGLE9 63
+#define ANGLE10 70
+#define ANGLE11 77
+
+
+
 
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -86,7 +148,8 @@ int acc_raw[3] = {0 , 0 , 0};
 float acc_angle[3] = {0, 0, 0};
 float acc_angle2 =  0;
 float calc_angle =  0;
-
+float calc_anglev =  0;
+int intensitypixel = 10;
 // Total 3D acceleration vector in m/s²
 long acc_total_vector;
 
@@ -104,16 +167,21 @@ int temperature;
 // Init flag set to TRUE after first loop
 boolean initialized;
 boolean initializedR; // permitto switch  init  to working mode
+boolean initializedM; // Acces to mode 2
 
 unsigned int  period; // Sampling period
 unsigned long loop_timer;
-
+int initcycle =0 ;
 //----------------------------------------------------------------------------------------------------------------------
 void setup() {
   Serial.begin(38400); //Only for debug
 
 
-Serial.print( "debug" ) ;
+//Serial.print( "debug" ) ;
+//
+//   pinMode(buttonPin, INPUT_PULLUP); 
+   pinMode(buttonPin, INPUT); 
+
   Wire.begin();
   TWBR = 12; // Set the I2C clock speed to 400kHz.
 
@@ -122,7 +190,7 @@ Serial.print( "debug" ) ;
 
   loop_timer = micros();
  // period = (1000000/ FREQ) ; // Sampling period in µs
- period = (100000) ; // Sampling period in µs
+ period = (1000) ; // Sampling period in µs
 
 
 
@@ -131,86 +199,92 @@ Serial.print( "debug" ) ;
 
   pixels.begin();    
 initializedR = false;  // consider  position  to be checked
+initializedM = false;  // consider  position  to be checked
 }
 
 void loop() {
-  readSensor();
-  calculateAngles();
 
- calc_angle =  acc_angle[ANGLE_MPU] -acc_angle2;
- 
+
+
+  pixels.setBrightness (Bpixel/intensitypixel*10);
+
+
 if(npixel++ >= NUMPIXELS) npixel=0;
+  
+readSensor();
+calculateAngles();
+
+calc_anglev = (calc_anglev*(sample-1) + acc_angle[ANGLE_MPU]*1)/sample ;
+  Serial.print(  calc_anglev ) ; 
+
+if ( initializedM == true)
 
 
-// init step   if the MPU  is quite stable 
-if( abs(calc_angle) < STAB_NOISE ) {
-  initializedR = true;
-  Serial.print( " a: " ) ;
-  Serial.print(acc_angle[ANGLE_MPU]  ) ;
-  Serial.println(" ok") ; 
+{  Serial.print( "!") ; 
+ calc_angle = calc_anglev - ANGLE_REF*1 ;
 }
+else
+{  Serial.print( "?") ;
+ calc_angle =  calc_anglev -acc_angle2;
+}
+   Serial.println(  calc_angle ) ; 
 
-
-
-
-// working step  
+ 
 
 if ( initializedR == false) {
+ if  (initcycle ++  >  4 * sample ) initializedR = true;
+  
 if (chenillard++ > 255) chenillard = 0;
  if ( (chenillard/2)*2==chenillard){
-  pixels.setPixelColor(npixel+1, pixels.Color(chenillard, 0, 255- chenillard));
+  pixels.setPixelColor(chenillard/30, pixels.Color(chenillard, 0, 255- chenillard));
  }
-  pixels.setPixelColor(npixel, pixels.Color(0, 0, 0));
+  pixels.setPixelColor(npixel, pixels.Color SANS);
  
-  acc_angle2 = acc_angle[ANGLE_MPU] ;
-   Serial.print( " a2: " ) ;
-  Serial.print( acc_angle2 ) ;  
-  Serial.println(" init") ;
+  acc_angle2 = (acc_angle2*(sample -1) + acc_angle[ANGLE_MPU]*1 )/sample;
 
 
-} else
-
-
+}    else
 {
-//  fonction degré/led bi sens
-  if (calc_angle <-(npixel+1)   ) {
-     if (calc_angle <-(npixel*5)   ) {
-    pixels.setPixelColor(NUMPIXELS - npixel, pixels.Color(172, 30, 68));
-    }else{
-    pixels.setPixelColor(NUMPIXELS - npixel, pixels.Color(110, 0, 20));
-          }
-    
-     Serial.print( ">" ) ;
+  pixels.setPixelColor(npixel, pixels.Color SANS);
+  if (calc_angle >0 ){
+  if ((calc_angle -(npixel+1))< ANGLE10   ) pixels.setPixelColor(npixel, pixels.Color VERT1 );
+  if ((calc_angle -(npixel+1))< ANGLE9   ) pixels.setPixelColor(npixel, pixels.Color SANS );
+  if ((calc_angle -(npixel+1))< ANGLE8   ) pixels.setPixelColor(npixel, pixels.Color JAUNE2 );
+  if ((calc_angle -(npixel+1))< ANGLE7   ) pixels.setPixelColor(npixel, pixels.Color SANS );
+  if ((calc_angle -(npixel+1))< ANGLE6   ) pixels.setPixelColor(npixel, pixels.Color JAUNE1 );
+  if ((calc_angle -(npixel+1))< ANGLE5   ) pixels.setPixelColor(npixel, pixels.Color SANS );
+  if ((calc_angle -(npixel+1))< ANGLE4   ) pixels.setPixelColor(npixel, pixels.Color JAUNE );
+  if ((calc_angle -(npixel+1))< ANGLE3   ) pixels.setPixelColor(npixel, pixels.Color SANS );
+  if ((calc_angle -(npixel+1))< ANGLE2   ) pixels.setPixelColor(npixel, pixels.Color BLEU2 );
+  if ((calc_angle -(npixel+1))< ANGLE1   ) pixels.setPixelColor(npixel, pixels.Color BLEU );
+  if ((calc_angle -(npixel+1))< ANGLE0   ) pixels.setPixelColor(npixel, pixels.Color VERT );
+  }else{
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE10   ) pixels.setPixelColor(npixel, pixels.Color VERT1 );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE9   ) pixels.setPixelColor(npixel, pixels.Color SANS );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE8   ) pixels.setPixelColor(npixel, pixels.Color VIOLET2 );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE7   ) pixels.setPixelColor(npixel, pixels.Color SANS );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE6   ) pixels.setPixelColor(npixel, pixels.Color VIOLET1 );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE5   ) pixels.setPixelColor(npixel, pixels.Color SANS );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE4   ) pixels.setPixelColor(npixel, pixels.Color VIOLET );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE3   ) pixels.setPixelColor(npixel, pixels.Color SANS );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE2   ) pixels.setPixelColor(npixel, pixels.Color ROUGE2 );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE1   ) pixels.setPixelColor(npixel, pixels.Color ROUGE );
+  if ((calc_angle +(NUMPIXELS -npixel))> -ANGLE0   ) pixels.setPixelColor(npixel, pixels.Color VERT );
   }
-  if (calc_angle > npixel +1   ){
-      if (calc_angle > npixel * 5  ){
-        pixels.setPixelColor(npixel, pixels.Color(33, 23, 65));
-      }else {
-    pixels.setPixelColor(npixel, pixels.Color(10, 5, 250));
-      }
-     Serial.print( "<" ) ;;  
-  }
-  
-  if (abs(calc_angle) <= 1)  {
-    
- pixels.setPixelColor(npixel, pixels.Color(20, 170, 20));
-    Serial.print( "=" ) ;;  }
 
 }
-  Serial.print( " a-a2: " ) ;
-  Serial.println(acc_angle[ANGLE_MPU] - acc_angle2 ) ;
 
 
+if (digitalRead(buttonPin) == HIGH){
+  initializedM = true; 
+  pixels.setPixelColor(npixel, pixels.Color(random(255), random(255), random(255)));
+}
 
   pixels.show();   // Send the updated pixel colors to the hardware.
-
-
 
   while (micros() - loop_timer < period);
   loop_timer = micros();
 }
-
-
 
 
 //  original data  from MPU
@@ -264,13 +338,13 @@ void setupMpu6050Registers() {
 void calibrateMpu6050()
 {
   
-Serial.println( "calibration" ) ;
+//Serial.println( "calibration" ) ;
   int max_samples = 100;
 
   for (int i = 0; i < max_samples; i++) {
     readSensor();
 
-Serial.println( i) ;
+//Serial.println( i) ;
     gyro_offset[X] += gyro_raw[X];
     gyro_offset[Y] += gyro_raw[Y];
     gyro_offset[Z] += gyro_raw[Z];
